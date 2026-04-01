@@ -2,10 +2,10 @@
 IT 직군 특화 취업 관리 및 공기업 가산점 시뮬레이션 서비스입니다.
 
 1. 개발 환경 구축
-   (1) 필수 프로그램 설치(PC)
-   Node.js (LTS 버전) 설치: https://nodejs.org/
-   VS Code 설치: https://code.visualstudio.com/
-   Git 설치: https://git-scm.com/
+(1) 필수 프로그램 설치(PC)
+Node.js (LTS 버전) 설치: https://nodejs.org/
+VS Code 설치: https://code.visualstudio.com/
+Git 설치: https://git-scm.com/
 
 (2) 스마트폰 세팅
 각자의 스마트폰(Android/iOS)에 'Expo Go' 앱을 설치합니다.
