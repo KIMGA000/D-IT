@@ -19,6 +19,7 @@
 
 # 1) 프로젝트 복제
 git clone https://github.com/KIMGA000/D-IT.git
+
 cd D-IT
 
 # 2) 필수 라이브러리 설치
@@ -26,7 +27,6 @@ npm install
 
 # 3) 앱 실행
 npx expo start
-\`\`\`
 
 ---
 
