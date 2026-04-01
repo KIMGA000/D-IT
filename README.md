@@ -1,50 +1,59 @@
-# Welcome to your Expo app 👋
+📱 D-IT(딧) - Mobile App Project
+IT 직군 특화 취업 관리 및 공기업 가산점 시뮬레이션 서비스입니다.
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+1. 개발 환경 구축
+   (1) 필수 프로그램 설치(PC)
+   Node.js (LTS 버전) 설치: https://nodejs.org/
+   VS Code 설치: https://code.visualstudio.com/
+   Git 설치: https://git-scm.com/
 
-## Get started
+(2) 스마트폰 세팅
+각자의 스마트폰(Android/iOS)에 'Expo Go' 앱을 설치합니다.
 
-1. Install dependencies
+2. 프로젝트 가져오기
 
-   ```bash
-   npm install
-   ```
+# 1. 프로젝트 복제
 
-2. Start the app
+git clone https://github.com/KIMGA000/D-IT.git
+cd d-it
 
-   ```bash
-   npx expo start
-   ```
+# 2. 필수 라이브러리 설치
 
-In the output, you'll find options to open the app in a
+npm install
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+# 3. 앱 실행
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+npx expo start
 
-## Get a fresh project
+3. 프로젝트 폴더 구조
+   app/ : 실제 앱의 화면(Page)들이 위치하는 곳입니다.
+   (tabs)/ : 하단 탭 메뉴 구성 (홈, 검색, 설정 등)
+   index.tsx : 앱을 켰을 때 가장 처음 뜨는 메인 화면
+   \_layout.tsx : 전체적인 앱의 뼈대(내비게이션) 설정
+   components/ : 버튼, 카드 등 재사용 가능한 UI 조각들을 모아둡니다.
+   constants/ : 색상(Colors.ts), 폰트 크기 등 공통 수치를 관리합니다.
+   assets/ : 이미지, 아이콘, 폰트 파일 저장소
+   hooks/ : 반복되는 로직을 커스텀 훅으로 관리합니다.
+   package.json : 프로젝트 정보 및 라이브러리 목록
 
-When you're ready, run:
+4. 브랜치 및 협업 규칙
+   (1) 브랜치 명명 규칙
+   feat/기능명 : 새로운 기능 추가 (예: feat/job-api)
+   ui/화면명 : UI 구현 및 스타일링 (예: ui/timer-screen)
+   fix/버그명 : 버그 수정 (예: fix/login-error)
+   docs/변경내용 : README 등 문서 수정
 
-```bash
-npm run reset-project
-```
+(2) 작업 프로세스
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+1. **최신 코드 가져오기** : `git checkout main` -> `git pull origin main`
+2. **새 브랜치 생성** : `git checkout -b feat/기능이름`
+3. **작업 및 커밋** : `git add .` -> `git commit -m "[Feat] 메인 화면 UI 수정"`
+4. **원격 업로드** : `git push origin feat/기능이름`
+5. **합치기(PR)** : GitHub에서 `Pull Request` 생성 후 팀원 검토 후 Merge
 
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+(3) 커밋 메시지 규칙
+[Feat] : 신규 기능 구현
+[Design] : UI 디자인 및 스타일 수정
+[Fix] : 버그 수정
+[Docs] : 문서 수정
+[Refactor] : 코드 리팩토링(기능 변경 없이 구조 개선)
