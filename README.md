@@ -17,7 +17,6 @@
 
 ## 🤝 2. 프로젝트 시작하기
 
-\`\`\`bash
 # 1) 프로젝트 복제
 git clone https://github.com/KIMGA000/D-IT.git
 cd D-IT
