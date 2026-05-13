@@ -1,31 +1,40 @@
-# 📱 D-IT (딧) - 2팀 (01즈)
+# 📱 D-IT (딧) - 팀 01Pass
+
 > **IT 직군 특화 취업 관리 및 공기업 가산점 시뮬레이션 서비스**
+>
+> 전산직·IT 취준생을 위해 흩어져 있는 채용 공고와 자격증 일정을 한데 모으고, 내 가산점을 실시간으로 계산해주는 스마트한 취업 비서입니다.
 
 ---
 
 ## 🛠️ 1. 개발 환경 구축
 
 ### (1) 필수 프로그램 설치 (PC)
-* **Node.js (LTS)**: [https://nodejs.org/](https://nodejs.org/)
-* **VS Code**: [https://code.visualstudio.com/](https://code.visualstudio.com/)
-* **Git**: [https://git-scm.com/](https://git-scm.com/)
+
+- **Node.js (LTS)**: [https://nodejs.org/](https://nodejs.org/)
+- **VS Code**: [https://code.visualstudio.com/](https://code.visualstudio.com/)
+- **Git**: [https://git-scm.com/](https://git-scm.com/)
 
 ### (2) 스마트폰 세팅
-* Android / iOS 기기에 **Expo Go** 앱 설치
+
+- Android / iOS 기기에 **Expo Go** 앱 설치
 
 ---
 
 ## 🤝 2. 프로젝트 시작하기
 
-# 1) 프로젝트 복제
-git clone https://github.com/KIMGA000/D-IT.git
+### 1) 프로젝트 복제
 
+```bash
+git clone [https://github.com/KIMGA000/D-IT.git](https://github.com/KIMGA000/D-IT.git)
 cd D-IT
 
-# 2) 필수 라이브러리 설치
+### 2) 필수 라이브러리 설치
 npm install
 
-# 3) 앱 실행
+### 3) 환경 변수 설정
+루트 폴더에 .env 파일을 생성하고 Supabase 접속 정보를 입력합니다. (보안을 위해 .env는 커밋하지 않습니다.)
+
+### 4) 앱 실행
 npx expo start
 
 ---
@@ -37,6 +46,9 @@ npx expo start
   * **(tabs)/**: 하단 탭 메뉴 구성 (홈, 검색, 설정 등)
   * **index.tsx**: 앱 실행 시 최초 화면
   * **_layout.tsx**: 전체 앱의 뼈대 및 내비게이션 설정
+* **services/**: API 통신 및 Supabase DB 관련 로직
+
+* **utils/**: D-Day 계산, 날짜 포맷팅 등 공용 함수
 * **components/**: 버튼, 카드 등 재사용 가능한 UI 컴포넌트
 * **constants/**: 색상, 폰트 크기 등 공통 스타일 값
 * **assets/**: 이미지, 아이콘, 폰트 파일 저장소
@@ -65,6 +77,10 @@ npx expo start
 * `[Fix]` : 버그 수정
 * `[Docs]` : 문서 수정
 * `[Refactor]` : 코드 구조 개선 (기능 변화 없음)
+* `[Chore]` : 빌드 설정, 라이브러리 설치 등
+
+### (3) 실행 명령어 (터미널용)
 git add README.md
-git commit -m "[Docs] 팀 협업을 위한 상세 가이드 구축 📝"
+git commit -m "[Docs] 팀명 수정(01Pass) 및 프로젝트 핵심 기능 명세 업데이트 📝"
 git push origin main
+```
