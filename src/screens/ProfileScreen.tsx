@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Linking,
   Modal,
   ScrollView,
   Text,
@@ -25,7 +26,7 @@ export default function ProfileScreen() {
   const [loadingCerts, setLoadingCerts] = useState(false);
 
   const activeSavedJobs = savedJobs.filter(
-    (j) => getStatus(j.raw.pbancEndYmd) !== "마감",
+    (j) => getStatus(j.raw?.pbancEndYmd || j.raw?.apply_end_date) !== "마감",
   );
 
   useEffect(() => {
@@ -34,10 +35,6 @@ export default function ProfileScreen() {
     }
   }, [isCertModalVisible]);
 
-  /**
-   * [수정] 정규화된 DB 구조에 맞게 '조인(Join)' 쿼리 사용
-   * certificates 테이블에서 agencies 정보를 함께 가져옵니다.
-   */
   const loadCertificates = async () => {
     setLoadingCerts(true);
     try {
@@ -56,22 +53,17 @@ export default function ProfileScreen() {
       if (error) throw error;
 
       if (data) {
-        // [핵심] 등급(grades) 배열을 풀어서 개별 자격증 객체로 변환
         const flattened: any[] = [];
-
         data.forEach((cert) => {
           if (cert.grades && cert.grades.length > 0) {
-            // 등급이 있는 경우 (예: 한국사 1급, 2급...)
             cert.grades.forEach((grade: string) => {
               flattened.push({
                 ...cert,
-                // 화면에 표시될 전체 이름 생성
                 displayName: `${cert.standard_name} ${grade}`,
-                grade: grade, // 나중에 계산을 위해 등급 정보 따로 저장
+                grade: grade,
               });
             });
           } else {
-            // 등급이 없는 단일 자격증인 경우
             flattened.push({
               ...cert,
               displayName: cert.standard_name,
@@ -79,7 +71,6 @@ export default function ProfileScreen() {
             });
           }
         });
-
         setAllCerts(flattened);
       }
     } catch (err: any) {
@@ -91,8 +82,6 @@ export default function ProfileScreen() {
 
   const filteredCerts = allCerts.filter((cert) => {
     const query = searchQuery.toLowerCase().replace(/\s/g, "");
-
-    // 이제 displayName(한국사능력검정시험 1급)을 기준으로 검색
     const nameMatch = cert.displayName
       .toLowerCase()
       .replace(/\s/g, "")
@@ -100,7 +89,6 @@ export default function ProfileScreen() {
     const certAliasMatch = cert.aliases?.some((a: string) =>
       a.toLowerCase().includes(query),
     );
-
     return nameMatch || certAliasMatch;
   });
 
@@ -113,7 +101,6 @@ export default function ProfileScreen() {
       <ScrollView
         contentContainerStyle={theme.scrollContent}
         showsVerticalScrollIndicator={false}>
-        {/* --- 섹션 1: 나의 보유 자격증 관리 --- */}
         <View
           style={{
             flexDirection: "row",
@@ -144,7 +131,16 @@ export default function ProfileScreen() {
         ) : (
           <View style={{ gap: 10, marginBottom: 30 }}>
             {userSpecs.certificates.map((cert: any, index: number) => (
-              <View key={index} style={[theme.card, { paddingVertical: 12 }]}>
+              <View
+                key={index}
+                style={[
+                  theme.card,
+                  {
+                    paddingVertical: 12,
+                    flexDirection: "row",
+                    alignItems: "center",
+                  },
+                ]}>
                 <Ionicons
                   name="ribbon"
                   size={20}
@@ -152,12 +148,10 @@ export default function ProfileScreen() {
                   style={{ marginRight: 10 }}
                 />
                 <View style={theme.cardInfo}>
-                  {/* [수정!] cert가 객체이므로 displayName을 출력해야 합니다. */}
                   <Text style={theme.cardTitle}>
                     {cert.displayName || cert}
                   </Text>
                 </View>
-                {/* [수정!] 삭제 시에도 객체를 넘겨야 context에서 정확히 찾아 지웁니다. */}
                 <TouchableOpacity onPress={() => removeSpec(cert)}>
                   <Ionicons name="trash-outline" size={20} color="#ef4444" />
                 </TouchableOpacity>
@@ -166,7 +160,6 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        {/* --- 섹션 2: 나의 관심 공고 (찜) --- */}
         <Text style={theme.sectionTitle}>
           관심 공고 ({activeSavedJobs.length})
         </Text>
@@ -181,12 +174,16 @@ export default function ProfileScreen() {
               style={theme.card}
               onPress={() => setSelectedJob(item.raw)}>
               <View style={theme.cardIcon}>
-                <Ionicons name="business" size={22} color="#4f46e5" />
+                <Ionicons
+                  name={item.type === "job" ? "business" : "ribbon"}
+                  size={22}
+                  color="#4f46e5"
+                />
               </View>
               <View style={theme.cardInfo}>
-                <Text style={theme.cardInst}>{item.institution}</Text>
+                <Text style={theme.cardInst}>{item.institution || ""}</Text>
                 <Text style={theme.cardTitle} numberOfLines={1}>
-                  {item.title}
+                  {item.title || ""}
                 </Text>
               </View>
               <TouchableOpacity
@@ -199,7 +196,6 @@ export default function ProfileScreen() {
         )}
       </ScrollView>
 
-      {/* --- 자격증 검색 및 추가 모달 --- */}
       <Modal visible={isCertModalVisible} animationType="slide" transparent>
         <View style={theme.modalOverlay}>
           <View style={[theme.modalContent, { height: "80%" }]}>
@@ -219,7 +215,6 @@ export default function ProfileScreen() {
                 <Ionicons name="close" size={28} color="#1e293b" />
               </TouchableOpacity>
             </View>
-
             <View
               style={{
                 backgroundColor: "#f1f5f9",
@@ -237,7 +232,6 @@ export default function ProfileScreen() {
                 onChangeText={setSearchQuery}
               />
             </View>
-
             {loadingCerts ? (
               <ActivityIndicator
                 size="large"
@@ -258,13 +252,7 @@ export default function ProfileScreen() {
                       borderBottomColor: "#f1f5f9",
                     }}
                     onPress={() => {
-                      // [중요] string이 아닌 객체 {standard_name, grade} 형태로 저장 추천
-                      // 만약 기존 context가 string 배열만 받는다면 item.displayName을 넘기세요.
-                      addSpec({
-                        standard_name: item.standard_name,
-                        grade: item.grade,
-                        displayName: item.displayName,
-                      });
+                      addSpec(item);
                       setIsCertModalVisible(false);
                       setSearchQuery("");
                     }}>
@@ -296,12 +284,48 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      {/* 상세 공고 모달 (생략된 기존 코드 유지) */}
-      {selectedJob && (
-        <Modal visible={!!selectedJob} transparent animationType="slide">
-          {/* ... (이전과 동일한 상세 모달 코드) ... */}
-        </Modal>
-      )}
+      <Modal visible={!!selectedJob} transparent animationType="slide">
+        <View style={theme.modalOverlay}>
+          <View style={theme.modalContent}>
+            <TouchableOpacity
+              style={{ alignSelf: "flex-end", marginBottom: 10 }}
+              onPress={() => setSelectedJob(null)}>
+              <Ionicons name="close" size={28} color="#1e293b" />
+            </TouchableOpacity>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={theme.modalInst}>
+                {selectedJob?.instNm || selectedJob?.institution || ""}
+              </Text>
+              <Text style={theme.modalTitle}>
+                {selectedJob?.recrutPbancTtl ||
+                  selectedJob?.certName ||
+                  selectedJob?.title ||
+                  ""}
+              </Text>
+              <View style={theme.modalDivider} />
+              <Text style={theme.modalSectionTitle}>📍 상세 정보</Text>
+              <Text style={theme.modalText}>
+                {selectedJob?.aplyQlfcCn || "상세 내용을 확인해주세요."}
+              </Text>
+              <Text style={theme.modalSectionTitle}>⏰ 마감 기한</Text>
+              <Text style={{ color: "#ef4444", fontWeight: "700" }}>
+                {selectedJob?.pbancEndYmd === "상시"
+                  ? "상시 접수 가능"
+                  : `${selectedJob?.pbancEndYmd || ""} 까지`}
+              </Text>
+              <TouchableOpacity
+                style={theme.modalLinkBtn}
+                onPress={() =>
+                  Linking.openURL(
+                    selectedJob?.srcUrl || "https://www.q-net.or.kr",
+                  )
+                }>
+                <Text style={theme.modalLinkText}>공고/시험 원문 확인하기</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

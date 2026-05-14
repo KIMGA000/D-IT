@@ -4,9 +4,6 @@ import { supabase } from "./supabase";
 const SERVICE_KEY = process.env.EXPO_PUBLIC_ALIO_KEY;
 const ALIO_BASE_URL = `https://opendata.alio.go.kr/new/v1/recruit/list.do`;
 
-/**
- * 2026년 공공기관 지정 현황 기반 분류 함수
- */
 const getMappedType = (instName: string): string => {
   const cleanName = instName.replace(/\s|㈜|\(주\)/g, "");
 
@@ -142,7 +139,6 @@ export const fetchAlioJobs = async (): Promise<Item[]> => {
     const data = await response.json();
     if (!data.result) return [];
 
-    // 1. 데이터 파싱 및 날짜 숫자화
     const parsedData = data.result.map((job: any) => {
       const dateStr = (
         job.pblntDate ||
@@ -156,7 +152,7 @@ export const fetchAlioJobs = async (): Promise<Item[]> => {
       };
     });
 
-    // 2. 기관별 최신 공고 1개만 남기기 (날짜 내림차순 정렬 후 필터링)
+    // 기관별 최신 공고 1개만 남기기
     const sorted = parsedData.sort(
       (a: any, b: any) => b.parsedDate - a.parsedDate,
     );
@@ -165,12 +161,11 @@ export const fetchAlioJobs = async (): Promise<Item[]> => {
         index === self.findIndex((t) => t.instNm === item.instNm),
     );
 
-    // 3. 2026년 이후 공고만 필터링
+    // 2026년 이후 공고만 필터링
     const finalFiltered = uniqueByInst.filter(
       (job: any) => job.parsedDate >= 20260101,
     );
 
-    // 4. DB 저장용 데이터 생성
     const companyData = finalFiltered.map((job: any) => ({
       name: job.instNm,
       notice_name: job.recrutPbancTtl.trim(),
@@ -178,7 +173,6 @@ export const fetchAlioJobs = async (): Promise<Item[]> => {
       pblnt_date: String(job.parsedDate),
     }));
 
-    // 5. DB Upsert (onConflict: "name" 기반으로 기관당 1개 유지)
     if (companyData.length > 0) {
       const { error: dbError } = await supabase
         .from("companies")
@@ -188,13 +182,13 @@ export const fetchAlioJobs = async (): Promise<Item[]> => {
       else console.log(`${companyData.length}개 기관 최신 데이터 동기화 완료!`);
     }
 
-    // 6. DB 청소 (2026년 이전 데이터 삭제)
+    // DB 청소(2026년 이전 데이터 삭제)
     await supabase
       .from("companies")
       .delete()
       .or("pblnt_date.lt.20260101,pblnt_date.is.null");
 
-    // 7. UI용 데이터 반환
+    // UI용 데이터 반환
     return finalFiltered.map((job: any) => ({
       id: job.recrutPblntSn,
       type: "job",

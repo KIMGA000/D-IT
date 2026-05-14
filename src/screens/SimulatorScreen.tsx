@@ -38,7 +38,6 @@ export default function SimulatorScreen() {
     try {
       const jobs = await fetchAlioJobs();
 
-      // [수정] bonus_rules에서 is_cumulative 필드를 함께 가져옵니다.
       const { data: dbData, error } = await supabase.from("companies").select(`
           name, notice_name, inst_type, max_bonus_rate,
           bonus_rules ( 
@@ -63,17 +62,12 @@ export default function SimulatorScreen() {
         const rules = dbInfo?.bonus_rules || [];
         const steps = Array.from(new Set(rules.map((r: any) => r.apply_step)));
 
-        // 점수 계산을 위한 변수들
         let myTotalScore = 0;
-        let maxPossibleScore = 0;
 
-        // [중요] 규칙마다 is_cumulative가 다를 수 있으므로 내부 로직에서 처리
-        // 보통 한 회사의 자격증 규칙들은 동일한 is_cumulative 값을 가집니다.
         const isCumulativeMode =
           rules.length > 0 ? rules[0].is_cumulative : false;
 
         if (isCumulativeMode) {
-          // A. 합산 모드 (공영홈쇼핑 등) : 점수를 계속 더함
           rules.forEach((rule: any) => {
             const certName = rule.certificates?.standard_name;
             const myCert = userSpecs.certificates.find(
@@ -93,7 +87,6 @@ export default function SimulatorScreen() {
             }
           });
         } else {
-          // B. 최고점 모드 (진흥원 등) : Math.max로 가장 높은 것 하나만 선택
           rules.forEach((rule: any) => {
             const certName = rule.certificates?.standard_name;
             const myCert = userSpecs.certificates.find(
@@ -114,14 +107,8 @@ export default function SimulatorScreen() {
           });
         }
 
-        // [핵심] 만점 기준점 설정 (Limit)
-        // DB에 등록된 max_bonus_rate를 최우선으로 사용합니다.
-        const limit = Number(dbInfo?.max_bonus_rate) || 6.0;
-
-        // 내 최종 점수는 한도(limit)를 넘을 수 없음
+        const limit = Number(dbInfo?.max_bonus_rate);
         const finalMyScore = Math.min(myTotalScore, limit);
-
-        // 환산 점수 계산 (30점 만점에 10점이면 33점)
         const normalizedScore = limit > 0 ? (finalMyScore / limit) * 100 : 0;
 
         return {

@@ -2,7 +2,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { Item, UserSpecs } from "../types";
 
-// 저장 키값 (냉장고 이름표라고 생각하면 됩니다)
 const STORAGE_KEY_JOBS = "@saved_jobs";
 const STORAGE_KEY_SPECS = "@user_specs";
 
@@ -23,7 +22,7 @@ export const SavedProvider = ({ children }: { children: React.ReactNode }) => {
     toeic: 0,
   });
 
-  // [1] 앱이 처음 켜질 때: 휴대폰(브라우저)에 저장된 데이터 가져오기
+  // 휴대폰(브라우저)에 저장된 데이터 가져오기
   useEffect(() => {
     const loadPersistedData = async () => {
       try {
@@ -41,7 +40,7 @@ export const SavedProvider = ({ children }: { children: React.ReactNode }) => {
     loadPersistedData();
   }, []);
 
-  // [2] 데이터가 바뀔 때마다 자동으로 저장하기
+  // 데이터가 바뀔 때마다 자동으로 저장하기
   useEffect(() => {
     const saveData = async () => {
       try {

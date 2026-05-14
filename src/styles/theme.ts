@@ -1,8 +1,7 @@
 // src/styles/theme.ts
-import { StyleSheet, Platform, StatusBar } from "react-native";
+import { Platform, StatusBar, StyleSheet } from "react-native";
 
 export const theme = StyleSheet.create({
-  // --- 기존 스타일 유지 ---
   safe: {
     flex: 1,
     backgroundColor: "#f8fafc",
@@ -26,7 +25,6 @@ export const theme = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    transform: [{ rotate: "3deg" }],
   },
   logoText: {
     fontSize: 22,
@@ -40,12 +38,15 @@ export const theme = StyleSheet.create({
     color: "#6366f1",
     textTransform: "uppercase",
   },
+
+  // --- 상단 탭 전환 메뉴 스타일 --
   subTabBar: {
     flexDirection: "row",
     backgroundColor: "#e2e8f0",
     padding: 4,
     borderRadius: 16,
-    marginBottom: 16,
+    marginTop: 10,
+    marginBottom: 10,
   },
   subTabBtn: {
     flex: 1,
@@ -62,6 +63,8 @@ export const theme = StyleSheet.create({
   },
   subTabText: { fontSize: 13, fontWeight: "800", color: "#64748b" },
   subTabTextActive: { color: "#4f46e5" },
+
+  // --- 콘텐츠 공통 스타일 ---
   sectionTitle: {
     fontSize: 20,
     fontWeight: "900",
@@ -73,7 +76,7 @@ export const theme = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 24,
     padding: 16,
-    marginBottom: 12,
+    marginBottom: 10,
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
@@ -114,12 +117,7 @@ export const theme = StyleSheet.create({
   dDayText: { fontSize: 10, fontWeight: "900", color: "#4f46e5" },
   scrollContent: { paddingHorizontal: 20, paddingBottom: 100 },
 
-  // --- 시뮬레이터 전용 추가 스타일 (가영님 공부용!) ---
-
-  /**
-   * 1. 전형 선택 토글 버튼 (필기/면접)
-   * 카드 내부에서 탭처럼 쓰이는 버튼들입니다.
-   */
+  // --- 가산점 시뮬레이터 전용 스타일 ---
   stepToggleRow: {
     flexDirection: "row",
     gap: 8,
@@ -143,10 +141,7 @@ export const theme = StyleSheet.create({
     color: "#fff",
   },
 
-  /**
-   * 2. 가산점 프로그레스 바 (충전율 그래프)
-   * "다 채우면 100점" 로직을 시각적으로 보여주는 막대기입니다.
-   */
+  // --- 프로그레스 바 (가산점 충전 그래프) ---
   progressContainer: {
     height: 20,
     backgroundColor: "#e2e8f0",
@@ -170,10 +165,7 @@ export const theme = StyleSheet.create({
     zIndex: 1,
   },
 
-  /**
-   * 3. 빈 데이터/준비 중 상태
-   * 자격증이 없거나 규칙이 없을 때 띄우는 안내 스타일입니다.
-   */
+  // --- 데이터 없음/준비 중 상태 ---
   emptyStateBox: {
     padding: 40,
     alignItems: "center",
@@ -191,7 +183,7 @@ export const theme = StyleSheet.create({
     textAlign: "center",
   },
 
-  // --- 기존 상세 모달 스타일 ---
+  // --- 하단 팝업 (상세 정보 모달) 스타일 ---
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
