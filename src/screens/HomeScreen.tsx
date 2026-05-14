@@ -31,7 +31,11 @@ export default function HomeScreen() {
           const filtered = data.filter(
             (j) => getStatus(j.raw.pbancEndYmd) !== "마감",
           );
-          setItems(filtered.sort((a, b) => a.dDay - b.dDay));
+          setItems(
+            filtered
+              .sort((a, b) => a.dDay - b.dDay)
+              .map((item) => ({ ...item, type: "job" })),
+          );
         } else {
           const { data, error } = await supabase.from("exams").select(`
               *,
@@ -54,31 +58,20 @@ export default function HomeScreen() {
                 (Array.isArray(ex.target)
                   ? ex.target[0]
                   : ex.target || "자격증");
-
               const isAlways = ex.exam_type === "always";
-              const start = ex.apply_start_date?.split("T")[0] || "";
               const end = ex.apply_end_date?.split("T")[0] || "";
-
-              const targetLabel = Array.isArray(ex.target)
-                ? ex.target.join(", ")
-                : ex.target || "";
-
-              const title =
-                certList.length > 1
-                  ? `${targetLabel} (${certName} 외 ${certList.length - 1}건)`
-                  : isAlways
-                    ? `${certName} (상시)`
-                    : `${certName} (${ex.exam_round || ""})`;
 
               return {
                 id: ex.id,
                 type: "exam",
-                title: title,
+                title: isAlways
+                  ? `${certName} (상시)`
+                  : `${certName} (${ex.exam_round || ""})`,
                 institution: instName,
-                period: isAlways ? "연중 상시 접수" : `${start} ~ ${end}`,
                 dDayValue: isAlways ? 999 : calculateDDay(ex.apply_end_date),
                 raw: {
                   ...ex,
+                  type: "exam",
                   certName,
                   instNm: instName,
                   srcUrl: webUrl,
@@ -86,12 +79,11 @@ export default function HomeScreen() {
                 },
               };
             });
-
-            const activeExams = formattedExams
-              .filter((ex) => getStatus(ex.raw.pbancEndYmd) !== "마감")
-              .sort((a, b) => a.dDayValue - b.dDayValue);
-
-            setItems(activeExams);
+            setItems(
+              formattedExams
+                .filter((ex) => getStatus(ex.raw.pbancEndYmd) !== "마감")
+                .sort((a, b) => a.dDayValue - b.dDayValue),
+            );
           }
         }
       } catch (err) {
@@ -114,11 +106,10 @@ export default function HomeScreen() {
     return dateStr.split("T")[0];
   };
 
-  if (loading) {
+  if (loading)
     return (
       <ActivityIndicator style={{ flex: 1 }} size="large" color="#4f46e5" />
     );
-  }
 
   return (
     <View style={theme.safe}>
@@ -172,75 +163,61 @@ export default function HomeScreen() {
           {activeTab === "job" ? "전산직 채용 공고" : "자격증 시험 일정"}
         </Text>
 
-        {items.length === 0 ? (
-          <View style={{ padding: 40, alignItems: "center" }}>
-            <Ionicons name="calendar-outline" size={48} color="#cbd5e1" />
-            <Text style={{ marginTop: 10, color: "#94a3b8" }}>
-              정보가 없습니다.
-            </Text>
-          </View>
-        ) : (
-          items.map((item) => {
-            const dDayLabel = getStatus(item.raw.pbancEndYmd);
-            const isSaved = savedJobs.find((j: any) => j.id === item.id);
-
-            return (
-              <TouchableOpacity
-                key={item.id}
-                style={theme.card}
-                onPress={() => setSelectedItem(item.raw)}>
+        {items.map((item) => {
+          const dDayLabel = getStatus(item.raw.pbancEndYmd);
+          const isSaved = savedJobs.find((j: any) => j.id === item.id);
+          return (
+            <TouchableOpacity
+              key={item.id}
+              style={theme.card}
+              onPress={() => setSelectedItem(item.raw)}>
+              <View
+                style={[
+                  theme.cardIcon,
+                  {
+                    backgroundColor:
+                      item.type === "job" ? "#eef2ff" : "#fffbeb",
+                  },
+                ]}>
+                <Ionicons
+                  name={
+                    item.type === "job" ? "business-outline" : "ribbon-outline"
+                  }
+                  size={22}
+                  color={item.type === "job" ? "#4f46e5" : "#d97706"}
+                />
+              </View>
+              <View style={theme.cardInfo}>
+                <Text style={theme.cardInst}>{item.institution}</Text>
+                <Text style={theme.cardTitle} numberOfLines={1}>
+                  {item.title}
+                </Text>
                 <View
                   style={[
-                    theme.cardIcon,
-                    {
-                      backgroundColor:
-                        item.type === "job" ? "#eef2ff" : "#fffbeb",
-                    },
+                    theme.dDayBadge,
+                    dDayLabel === "D-Day" && { backgroundColor: "#fee2e2" },
                   ]}>
-                  <Ionicons
-                    name={
-                      item.type === "job"
-                        ? "business-outline"
-                        : "ribbon-outline"
-                    }
-                    size={22}
-                    color={item.type === "job" ? "#4f46e5" : "#d97706"}
-                  />
-                </View>
-
-                <View style={theme.cardInfo}>
-                  <Text style={theme.cardInst}>{item.institution || ""}</Text>
-                  <Text style={theme.cardTitle} numberOfLines={1}>
-                    {item.title || ""}
-                  </Text>
-                  <View
+                  <Text
                     style={[
-                      theme.dDayBadge,
-                      dDayLabel === "D-Day" && { backgroundColor: "#fee2e2" },
+                      theme.dDayText,
+                      dDayLabel === "D-Day" && { color: "#ef4444" },
                     ]}>
-                    <Text
-                      style={[
-                        theme.dDayText,
-                        dDayLabel === "D-Day" && { color: "#ef4444" },
-                      ]}>
-                      {dDayLabel || ""}
-                    </Text>
-                  </View>
+                    {dDayLabel}
+                  </Text>
                 </View>
-
-                <TouchableOpacity
-                  onPress={() => toggleSave(item)}
-                  style={{ padding: 10 }}>
-                  <Ionicons
-                    name={isSaved ? "star" : "star-outline"}
-                    size={24}
-                    color={isSaved ? "#f59e0b" : "#e2e8f0"}
-                  />
-                </TouchableOpacity>
+              </View>
+              <TouchableOpacity
+                onPress={() => toggleSave(item)}
+                style={{ padding: 10 }}>
+                <Ionicons
+                  name={isSaved ? "star" : "star-outline"}
+                  size={24}
+                  color={isSaved ? "#f59e0b" : "#e2e8f0"}
+                />
               </TouchableOpacity>
-            );
-          })
-        )}
+            </TouchableOpacity>
+          );
+        })}
       </ScrollView>
 
       <Modal visible={!!selectedItem} transparent animationType="slide">
@@ -259,61 +236,70 @@ export default function HomeScreen() {
               </Text>
               <View style={theme.modalDivider} />
 
-              <Text style={theme.modalSectionTitle}>📅 상세 일정</Text>
-
-              <View
-                style={{
-                  backgroundColor: "#f8fafc",
-                  padding: 15,
-                  borderRadius: 12,
-                  gap: 12,
-                }}>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                  }}>
-                  <Text style={{ color: "#64748b", fontWeight: "600" }}>
-                    원서 접수
+              {selectedItem?.type === "exam" ? (
+                <>
+                  <Text style={theme.modalSectionTitle}>📅 시험 상세 일정</Text>
+                  <View
+                    style={{
+                      backgroundColor: "#f8fafc",
+                      padding: 15,
+                      borderRadius: 12,
+                      gap: 12,
+                    }}>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                      }}>
+                      <Text style={{ color: "#64748b", fontWeight: "600" }}>
+                        원서 접수
+                      </Text>
+                      <Text style={{ color: "#1e293b" }}>
+                        {selectedItem?.apply_start_date
+                          ? `${formatDate(selectedItem.apply_start_date)} ~ ${formatDate(selectedItem.apply_end_date)}`
+                          : "상시 접수"}
+                      </Text>
+                    </View>
+                    <View style={{ height: 1, backgroundColor: "#e2e8f0" }} />
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                      }}>
+                      <Text style={{ color: "#64748b", fontWeight: "600" }}>
+                        필기 시험
+                      </Text>
+                      <Text style={{ color: "#1e293b" }}>
+                        {formatDate(selectedItem?.exam_start_date) ||
+                          "일정 확인 필요"}
+                      </Text>
+                    </View>
+                    <View style={{ height: 1, backgroundColor: "#e2e8f0" }} />
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                      }}>
+                      <Text style={{ color: "#64748b", fontWeight: "600" }}>
+                        실기 시험
+                      </Text>
+                      <Text style={{ color: "#1e293b" }}>
+                        {formatDate(selectedItem?.exam_end_date) || "-"}
+                      </Text>
+                    </View>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Text style={theme.modalSectionTitle}>
+                    📍 채용 공고 상세 정보
                   </Text>
-                  <Text style={{ color: "#1e293b" }}>
-                    {selectedItem?.apply_start_date
-                      ? `${formatDate(selectedItem.apply_start_date)} ~ ${formatDate(selectedItem.apply_end_date)}`
-                      : "상시 접수"}
+                  <Text style={theme.modalText}>
+                    {selectedItem?.aplyQlfcCn ||
+                      "상세 공고 내용을 확인해주세요."}
                   </Text>
-                </View>
-
-                <View style={{ height: 1, backgroundColor: "#e2e8f0" }} />
-
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                  }}>
-                  <Text style={{ color: "#64748b", fontWeight: "600" }}>
-                    필기 시험
-                  </Text>
-                  <Text style={{ color: "#1e293b" }}>
-                    {formatDate(selectedItem?.exam_start_date) ||
-                      "일정 확인 필요"}
-                  </Text>
-                </View>
-
-                <View style={{ height: 1, backgroundColor: "#e2e8f0" }} />
-
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                  }}>
-                  <Text style={{ color: "#64748b", fontWeight: "600" }}>
-                    실기 시험
-                  </Text>
-                  <Text style={{ color: "#1e293b" }}>
-                    {formatDate(selectedItem?.exam_end_date) || "-"}
-                  </Text>
-                </View>
-              </View>
+                </>
+              )}
 
               <Text style={[theme.modalSectionTitle, { marginTop: 20 }]}>
                 ⏰ 마감 기한
@@ -326,8 +312,16 @@ export default function HomeScreen() {
 
               <TouchableOpacity
                 style={theme.modalLinkBtn}
-                onPress={() => Linking.openURL(selectedItem?.srcUrl)}>
-                <Text style={theme.modalLinkText}>공고/시험 원문 확인하기</Text>
+                onPress={() =>
+                  Linking.openURL(
+                    selectedItem?.srcUrl || "https://www.q-net.or.kr",
+                  )
+                }>
+                <Text style={theme.modalLinkText}>
+                  {selectedItem?.type === "exam"
+                    ? "시험 원문 확인하기"
+                    : "채용 공고 원문 확인하기"}
+                </Text>
               </TouchableOpacity>
             </ScrollView>
           </View>
