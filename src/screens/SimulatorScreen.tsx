@@ -108,8 +108,9 @@ export default function SimulatorScreen() {
         }
 
         const limit = Number(dbInfo?.max_bonus_rate);
-        const finalMyScore = Math.min(myTotalScore, limit);
-        const normalizedScore = limit > 0 ? (finalMyScore / limit) * 100 : 0;
+        const isRateReady = limit > 0;
+        const finalMyScore = isRateReady ? Math.min(myTotalScore, limit) : 0;
+        const normalizedScore = isRateReady ? (finalMyScore / limit) * 100 : 0;
 
         return {
           ...job,
@@ -119,7 +120,7 @@ export default function SimulatorScreen() {
           maxLimit: limit,
           normalizedScore,
           steps,
-          isReady: rules.length > 0,
+          isReady: rules.length > 0 && isRateReady,
         };
       });
 
