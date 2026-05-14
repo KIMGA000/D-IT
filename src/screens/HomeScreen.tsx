@@ -20,7 +20,7 @@ export default function HomeScreen() {
   const [activeTab, setActiveTab] = useState<"job" | "exam">("job");
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedJob, setSelectedJob] = useState<any>(null);
+  const [selectedItem, setSelectedItem] = useState<any>(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -35,7 +35,7 @@ export default function HomeScreen() {
         } else {
           const { data, error } = await supabase.from("exams").select(`
               *,
-              agency:agency_id ( name ), 
+              agency:agency_id ( name, website_url ), 
               exam_certificates (
                 certificates ( standard_name )
               )
@@ -46,6 +46,8 @@ export default function HomeScreen() {
           if (data) {
             const formattedExams = data.map((ex: any) => {
               const instName = ex.agency?.name || "주관처 정보 없음";
+              const webUrl =
+                ex.agency?.website_url || "https://www.q-net.or.kr";
               const certList = ex.exam_certificates || [];
               const certName =
                 certList[0]?.certificates?.standard_name ||
@@ -79,6 +81,7 @@ export default function HomeScreen() {
                   ...ex,
                   certName,
                   instNm: instName,
+                  srcUrl: webUrl,
                   pbancEndYmd: isAlways ? "상시" : end.replace(/-/g, ""),
                 },
               };
@@ -104,6 +107,11 @@ export default function HomeScreen() {
     if (!date) return 999;
     const diff = new Date(date).getTime() - new Date().getTime();
     return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  };
+
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return "-";
+    return dateStr.split("T")[0];
   };
 
   if (loading) {
@@ -180,7 +188,7 @@ export default function HomeScreen() {
               <TouchableOpacity
                 key={item.id}
                 style={theme.card}
-                onPress={() => setSelectedJob(item.raw)}>
+                onPress={() => setSelectedItem(item.raw)}>
                 <View
                   style={[
                     theme.cardIcon,
@@ -235,41 +243,90 @@ export default function HomeScreen() {
         )}
       </ScrollView>
 
-      <Modal visible={!!selectedJob} transparent animationType="slide">
+      <Modal visible={!!selectedItem} transparent animationType="slide">
         <View style={theme.modalOverlay}>
           <View style={theme.modalContent}>
             <TouchableOpacity
               style={{ alignSelf: "flex-end", marginBottom: 10 }}
-              onPress={() => setSelectedJob(null)}>
+              onPress={() => setSelectedItem(null)}>
               <Ionicons name="close" size={28} color="#1e293b" />
             </TouchableOpacity>
 
             <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={theme.modalInst}>{selectedJob?.instNm || ""}</Text>
+              <Text style={theme.modalInst}>{selectedItem?.instNm}</Text>
               <Text style={theme.modalTitle}>
-                {selectedJob?.recrutPbancTtl || selectedJob?.certName || ""}
+                {selectedItem?.recrutPbancTtl || selectedItem?.certName}
               </Text>
               <View style={theme.modalDivider} />
 
-              <Text style={theme.modalSectionTitle}>📍 상세 정보</Text>
-              <Text style={theme.modalText}>
-                {selectedJob?.aplyQlfcCn || "상세 공고 내용을 확인해주세요."}
-              </Text>
+              <Text style={theme.modalSectionTitle}>📅 상세 일정</Text>
 
-              <Text style={theme.modalSectionTitle}>⏰ 마감 기한</Text>
+              <View
+                style={{
+                  backgroundColor: "#f8fafc",
+                  padding: 15,
+                  borderRadius: 12,
+                  gap: 12,
+                }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                  }}>
+                  <Text style={{ color: "#64748b", fontWeight: "600" }}>
+                    원서 접수
+                  </Text>
+                  <Text style={{ color: "#1e293b" }}>
+                    {selectedItem?.apply_start_date
+                      ? `${formatDate(selectedItem.apply_start_date)} ~ ${formatDate(selectedItem.apply_end_date)}`
+                      : "상시 접수"}
+                  </Text>
+                </View>
+
+                <View style={{ height: 1, backgroundColor: "#e2e8f0" }} />
+
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                  }}>
+                  <Text style={{ color: "#64748b", fontWeight: "600" }}>
+                    필기 시험
+                  </Text>
+                  <Text style={{ color: "#1e293b" }}>
+                    {formatDate(selectedItem?.exam_start_date) ||
+                      "일정 확인 필요"}
+                  </Text>
+                </View>
+
+                <View style={{ height: 1, backgroundColor: "#e2e8f0" }} />
+
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                  }}>
+                  <Text style={{ color: "#64748b", fontWeight: "600" }}>
+                    실기 시험
+                  </Text>
+                  <Text style={{ color: "#1e293b" }}>
+                    {formatDate(selectedItem?.exam_end_date) || "-"}
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={[theme.modalSectionTitle, { marginTop: 20 }]}>
+                ⏰ 마감 기한
+              </Text>
               <Text style={{ color: "#ef4444", fontWeight: "700" }}>
-                {selectedJob?.pbancEndYmd === "상시"
+                {selectedItem?.pbancEndYmd === "상시"
                   ? "상시 접수 가능"
-                  : `${selectedJob?.pbancEndYmd || ""} 까지`}
+                  : `${selectedItem?.pbancEndYmd || ""} 까지`}
               </Text>
 
               <TouchableOpacity
                 style={theme.modalLinkBtn}
-                onPress={() =>
-                  Linking.openURL(
-                    selectedJob?.srcUrl || "https://www.q-net.or.kr",
-                  )
-                }>
+                onPress={() => Linking.openURL(selectedItem?.srcUrl)}>
                 <Text style={theme.modalLinkText}>공고/시험 원문 확인하기</Text>
               </TouchableOpacity>
             </ScrollView>
