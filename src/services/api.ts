@@ -264,7 +264,7 @@ export const fetchAlioJobs = async (): Promise<Item[]> => {
 
     const { data: existingCompanies } = await supabase
       .from("companies")
-      .select("notice_id, max_bonus_rate, max_bonus_point, name");
+      .select("notice_id, max_bonus_rate, name");
 
     const companyData = finalFiltered.map((job: any) => {
       const matchDb =
@@ -272,7 +272,6 @@ export const fetchAlioJobs = async (): Promise<Item[]> => {
         existingCompanies?.find((e) => e.name === job.sanitizedCompanyName);
 
       const currentRate = matchDb ? matchDb.max_bonus_rate : 0;
-      const currentPoint = matchDb ? matchDb.max_bonus_point : 0;
 
       return {
         name: job.sanitizedCompanyName,
@@ -286,7 +285,6 @@ export const fetchAlioJobs = async (): Promise<Item[]> => {
         scrn_mthd_expln: job.scrnprcdrMthdExpln || "공고 원문을 참조해 주세요.",
         pref_cn: job.prefCn || "우대사항 정보 없음",
         max_bonus_rate: currentRate,
-        max_bonus_point: currentPoint,
       };
     });
 
