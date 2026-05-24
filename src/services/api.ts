@@ -5,8 +5,10 @@ const SERVICE_KEY = process.env.EXPO_PUBLIC_ALIO_KEY;
 const ALIO_BASE_URL = `https://opendata.alio.go.kr/new/v1/recruit/list.do`;
 
 const getMappedType = (instName: string): string => {
-  const cleanName = instName.replace(/\s|㈜|\(주\)/g, "");
-
+  const cleanName = instName.replace(
+    /\s|㈜|\(주\)|주식회사|\(재\)|재단법인/g,
+    "",
+  );
   const marketType = [
     "인천국제공항공사",
     "한국공항공사",
@@ -71,7 +73,7 @@ const getMappedType = (instName: string): string => {
     "축산물품질평가원",
     "한국농수산식품유통공사",
     "한국농어촌공사",
-    "대한무역투자진흥공사",
+    "대한무역투자진험공사",
     "한국가스안전공사",
     "한국산업기술진흥원",
     "한국산업기술기획평가원",
@@ -91,7 +93,7 @@ const getMappedType = (instName: string): string => {
     "한국고용정보원",
     "한국산업안전보건공단",
     "한국산업인력공단",
-    "한국장애인고용공단",
+    "한국장학재단",
     "국가철도공단",
     "국토안전관리원",
     "한국국토정보공사",
@@ -111,12 +113,72 @@ const getMappedType = (instName: string): string => {
     return "준정부기관(기금)";
   if (executionType.some((name) => cleanName.includes(name)))
     return "준정부기관(위탁)";
-
   return "기타공공기관";
 };
 
 export const fetchAlioJobs = async (): Promise<Item[]> => {
   try {
+    const { data: latestOne, error: timeError } = await supabase
+      .from("companies")
+      .select("created_at")
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    let needApiCall = false;
+
+    if (!latestOne || latestOne.length === 0 || timeError) {
+      needApiCall = true;
+    } else {
+      const lastSavedTime = new Date(latestOne[0].created_at).getTime();
+      const currentTime = new Date().getTime();
+      const diffMs = currentTime - lastSavedTime;
+      const THREE_HOURS_MS = 3 * 60 * 60 * 1000;
+
+      console.log(`[Time Check] 마지막 저장: ${latestOne[0].created_at}`);
+      console.log(
+        `[Time Check] 시차(시간 환산): ${(diffMs / (1000 * 60 * 60)).toFixed(2)}시간`,
+      );
+
+      if (diffMs > THREE_HOURS_MS || diffMs < 0) {
+        needApiCall = true;
+      }
+    }
+
+    // 3시간 미만 경과: 안전하게 보존된 캐시 데이터 즉시 반환
+    if (!needApiCall) {
+      console.log("[Cache] 데이터가 유효합니다. 누적된 DB 캐시를 반환합니다.");
+      const { data: cachedCompanies } = await supabase
+        .from("companies")
+        .select("*")
+        .order("pblnt_date", { ascending: false });
+
+      if (cachedCompanies && cachedCompanies.length > 0) {
+        return cachedCompanies.map((c: any) => ({
+          id: parseInt(c.notice_id) || 0,
+          type: "job",
+          title: c.notice_name,
+          institution: c.name,
+          dDay: 0,
+          url: c.url || "https://job.alio.go.kr",
+          raw: {
+            ...c,
+            notice_id: String(c.notice_id || "").trim(),
+            instNm: c.name,
+            recrutPbancTtl: c.notice_name,
+            pbancEndYmd: c.pbanc_end_ymd || c.pblnt_date,
+            srcUrl: c.url,
+            aplyQlfcCn: c.aply_qlfc_cn,
+            scrnprcdrMthdExpln: c.scrn_mthd_expln,
+            prefCn: c.pref_cn,
+          },
+        }));
+      }
+    }
+
+    // 3시간 만료 시 실시간 API 동기화 파트 개시
+    console.log(
+      "[Sync] 3시간이 만료되어 ALIO API로부터 새로운 데이터를 동기화합니다.",
+    );
     const queryParams = new URLSearchParams({
       serviceKey: SERVICE_KEY || "",
       pageNo: "1",
@@ -139,64 +201,158 @@ export const fetchAlioJobs = async (): Promise<Item[]> => {
     const data = await response.json();
     if (!data.result) return [];
 
-    const parsedData = data.result.map((job: any) => {
+    const filteredByKeyword = data.result.filter((job: any) => {
+      const ttl = job.recrutPbancTtl || "";
+      const isExperienced =
+        ttl.includes("경력") ||
+        ttl.includes("박사") ||
+        ttl.includes("전문 자격") ||
+        ttl.includes("제한") ||
+        ttl.includes("계약직원") ||
+        ttl.includes("휴직대체") ||
+        ttl.includes("경력경쟁");
+      const isRestricted = ttl.includes("고졸") || ttl.includes("보훈");
+      return !isExperienced && !isRestricted;
+    });
+
+    const parsedAndCleaned = filteredByKeyword.map((job: any) => {
       const dateStr = (
         job.pblntDate ||
         job.pblntDt ||
         job.pbancBgngYmd ||
         ""
       ).replace(/[^0-9]/g, "");
+      const noticeId = job.recrutPblntSn
+        ? String(job.recrutPblntSn).trim()
+        : "0";
+      const originalApiEndDate =
+        job.pbancEndYmd || job.pbancEnd || job.pblntDate || "";
+      const endYmd = String(originalApiEndDate)
+        .replace(/[^0-9]/g, "")
+        .substring(0, 8);
+      const sanitizedCompanyName = job.instNm.replace(
+        /\s|㈜|\(주\)|주식회사|\(재\)|재단법인/g,
+        "",
+      );
+
       return {
         ...job,
         parsedDate: parseInt(dateStr.substring(0, 8)) || 0,
+        sanitizedCompanyName,
+        noticeId,
+        endYmd,
       };
     });
 
-    // 기관별 최신 공고 1개만 남기기
-    const sorted = parsedData.sort(
+    const sorted = parsedAndCleaned.sort(
       (a: any, b: any) => b.parsedDate - a.parsedDate,
     );
-    const uniqueByInst = sorted.filter(
+
+    const uniqueJobs = sorted.filter(
       (item: any, index: number, self: any[]) =>
-        index === self.findIndex((t) => t.instNm === item.instNm),
+        index ===
+        self.findIndex(
+          (t) =>
+            t.sanitizedCompanyName === item.sanitizedCompanyName &&
+            t.recrutPbancTtl === item.recrutPbancTtl,
+        ),
     );
 
-    // 2026년 이후 공고만 필터링
-    const finalFiltered = uniqueByInst.filter(
+    const finalFiltered = uniqueJobs.filter(
       (job: any) => job.parsedDate >= 20260101,
     );
 
-    const companyData = finalFiltered.map((job: any) => ({
-      name: job.instNm,
-      notice_name: job.recrutPbancTtl.trim(),
-      inst_type: getMappedType(job.instNm),
-      pblnt_date: String(job.parsedDate),
-    }));
+    const { data: existingCompanies } = await supabase
+      .from("companies")
+      .select("notice_id, max_bonus_rate, max_bonus_point, name");
+
+    const companyData = finalFiltered.map((job: any) => {
+      const matchDb =
+        existingCompanies?.find((e) => e.notice_id === job.noticeId) ||
+        existingCompanies?.find((e) => e.name === job.sanitizedCompanyName);
+
+      const currentRate = matchDb ? matchDb.max_bonus_rate : 0;
+      const currentPoint = matchDb ? matchDb.max_bonus_point : 0;
+
+      return {
+        name: job.sanitizedCompanyName,
+        notice_name: job.recrutPbancTtl.trim(),
+        inst_type: getMappedType(job.instNm),
+        pblnt_date: String(job.parsedDate),
+        notice_id: job.noticeId,
+        url: job.srcUrl || "https://job.alio.go.kr",
+        pbanc_end_ymd: job.endYmd,
+        aply_qlfc_cn: job.aplyQlfcCn || "공고 원문을 참조해 주세요.",
+        scrn_mthd_expln: job.scrnprcdrMthdExpln || "공고 원문을 참조해 주세요.",
+        pref_cn: job.prefCn || "우대사항 정보 없음",
+        max_bonus_rate: currentRate,
+        max_bonus_point: currentPoint,
+      };
+    });
 
     if (companyData.length > 0) {
       const { error: dbError } = await supabase
         .from("companies")
-        .upsert(companyData, { onConflict: "name" });
+        .upsert(companyData, { onConflict: "notice_id" });
 
       if (dbError) console.error("DB 업데이트 실패:", dbError.message);
-      else console.log(`${companyData.length}개 기관 최신 데이터 동기화 완료!`);
+      else console.log(`[Sync Success] 신규 공고 동기화 완료!`);
     }
 
-    // DB 청소(2026년 이전 데이터 삭제)
-    await supabase
+    const blacklistKeywords = [
+      "경력",
+      "박사",
+      "전문 자격",
+      "제한",
+      "경력경쟁",
+      "고졸",
+      "보훈",
+      "실무직",
+      "기능직",
+    ];
+
+    const deleteCondition = blacklistKeywords
+      .map((keyword) => `notice_name.ilike.%${keyword}%`)
+      .join(",");
+
+    const { data: deletedRows, error: deleteError } = await supabase
       .from("companies")
       .delete()
-      .or("pblnt_date.lt.20260101,pblnt_date.is.null");
+      .or(deleteCondition);
 
-    // UI용 데이터 반환
-    return finalFiltered.map((job: any) => ({
-      id: job.recrutPblntSn,
+    if (deleteError) {
+      console.error(
+        "[Blacklist Delete Error] 블랙리스트 삭제 실패:",
+        deleteError.message,
+      );
+    } else {
+      console.log(
+        `[Blacklist Cleaned] DB 내 블랙리스트 노이즈 공고 자동 청소 완료.`,
+      );
+    }
+
+    const { data: allAccumulated } = await supabase
+      .from("companies")
+      .select("*")
+      .order("pblnt_date", { ascending: false });
+    return (allAccumulated || []).map((c: any) => ({
+      id: parseInt(c.notice_id) || 0,
       type: "job",
-      title: job.recrutPbancTtl.trim(),
-      institution: job.instNm,
-      dDay: job.decimalDay,
-      url: job.srcUrl,
-      raw: job,
+      title: c.notice_name,
+      institution: c.name,
+      dDay: 0,
+      url: c.url || "https://job.alio.go.kr",
+      raw: {
+        ...c,
+        notice_id: String(c.notice_id || "").trim(),
+        instNm: c.name,
+        recrutPbancTtl: c.notice_name,
+        pbancEndYmd: c.pbanc_end_ymd || c.pblnt_date,
+        srcUrl: c.url,
+        aplyQlfcCn: c.aply_qlfc_cn,
+        scrnprcdrMthdExpln: c.scrn_mthd_expln,
+        prefCn: c.pref_cn,
+      },
     }));
   } catch (error) {
     console.error("오류 발생:", error);

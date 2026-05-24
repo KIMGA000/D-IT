@@ -2,18 +2,17 @@ import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Linking,
-  Modal,
   ScrollView,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import JobCard from "../components/JobCard";
+import JobDetailModal from "../components/JobDetailModal";
 import { useSaved } from "../context/SavedContext";
 import { fetchAlioJobs } from "../services/api";
 import { supabase } from "../services/supabase";
 import { theme } from "../styles/theme";
-import { getStatus } from "../utils/data";
 
 export default function HomeScreen() {
   const { savedJobs, toggleSave } = useSaved();
@@ -28,62 +27,191 @@ export default function HomeScreen() {
       try {
         if (activeTab === "job") {
           const data = await fetchAlioJobs();
-          const filtered = data.filter(
-            (j) => getStatus(j.raw.pbancEndYmd) !== "마감",
-          );
-          setItems(
-            filtered
-              .sort((a, b) => a.dDay - b.dDay)
-              .map((item) => ({ ...item, type: "job" })),
-          );
+
+          const { data: blacklistData } = await supabase
+            .from("blacklists")
+            .select("notice_id, company_name");
+
+          let bannedIds: string[] = [];
+          let bannedCompanyNames: string[] = [];
+
+          if (blacklistData && blacklistData.length > 0) {
+            bannedIds = blacklistData.map((b) =>
+              String(b.notice_id || "").trim(),
+            );
+            bannedCompanyNames = blacklistData.map((b) =>
+              String(b.company_name || "").replace(/[^가-힣a-zA-Z0-9]/g, ""),
+            );
+          }
+
+          const processedJobs = data.map((item) => {
+            let rawDateStr = String(item.raw?.pbancEndYmd || "").replace(
+              /[^0-9]/g,
+              "",
+            );
+            let displayDate = rawDateStr;
+
+            if (rawDateStr.length === 8) {
+              displayDate = `${rawDateStr.substring(0, 4)}-${rawDateStr.substring(4, 6)}-${rawDateStr.substring(6, 8)}`;
+            }
+
+            let dDayLabel = "접수중";
+            let isUrgent = false;
+            let isDDay = false;
+            let isFinished = false;
+            let sortWeight = 999;
+
+            if (
+              displayDate &&
+              displayDate !== "상시" &&
+              displayDate.length === 10
+            ) {
+              const target = new Date(displayDate);
+              const today = new Date();
+              target.setHours(0, 0, 0, 0);
+              today.setHours(0, 0, 0, 0);
+
+              if (!isNaN(target.getTime())) {
+                const diffDays = Math.ceil(
+                  (target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+                );
+                sortWeight = diffDays;
+
+                if (diffDays < 0) {
+                  dDayLabel = "마감";
+                  isFinished = true;
+                } else if (diffDays === 0) {
+                  dDayLabel = "오늘마감";
+                  isUrgent = true;
+                } else if (diffDays <= 3) {
+                  dDayLabel = `D-${diffDays}`;
+                  isUrgent = true;
+                } else {
+                  dDayLabel = `D-${diffDays}`;
+                  isDDay = true;
+                }
+              }
+            }
+
+            return {
+              ...item,
+              id: String(item.id || item.raw?.notice_id || "").trim(),
+              type: "job",
+              dDayLabel,
+              isUrgent,
+              isDDay,
+              isFinished,
+              sortWeight,
+              raw: {
+                ...item.raw,
+                type: "job",
+                pbancEndYmd: displayDate,
+                instNm: item.institution,
+                recrutPbancTtl: item.title,
+                srcUrl: item.url,
+                aplyQlfcCn: item.raw?.aplyQlfcCn || "공고 원문을 참조해주세요.",
+                scrnprcdrMthdExpln:
+                  item.raw?.scrnprcdrMthdExpln || "공고 원문을 참조해주세요.",
+                prefCn: item.raw?.prefCn || "우대사항 정보 없음",
+              },
+            };
+          });
+
+          const aliveJobs = processedJobs.filter((job) => {
+            const currentIdStr = String(job.id).trim();
+            const cleanInstName = String(job.institution || "").replace(
+              /[^가-힣a-zA-Z0-9]/g,
+              "",
+            );
+
+            const isIdBanned = bannedIds.includes(currentIdStr);
+            const isNameBanned = bannedCompanyNames.some(
+              (bannedName) =>
+                bannedName.length > 0 &&
+                (cleanInstName.includes(bannedName) ||
+                  bannedName.includes(cleanInstName)),
+            );
+
+            if (isIdBanned || isNameBanned) return false;
+            return !job.isFinished;
+          });
+
+          setItems(aliveJobs.sort((a, b) => a.sortWeight - b.sortWeight));
         } else {
-          const { data, error } = await supabase.from("exams").select(`
+          const { data: examData, error } = await supabase.from("exams")
+            .select(`
               *,
               agency:agency_id ( name, website_url ), 
-              exam_certificates (
-                certificates ( standard_name )
-              )
+              exam_certificates ( certificates ( standard_name ) )
             `);
 
           if (error) throw error;
 
-          if (data) {
-            const formattedExams = data.map((ex: any) => {
+          if (examData) {
+            const formattedExams = examData.map((ex: any) => {
               const instName = ex.agency?.name || "주관처 정보 없음";
               const webUrl =
                 ex.agency?.website_url || "https://www.q-net.or.kr";
-              const certList = ex.exam_certificates || [];
               const certName =
-                certList[0]?.certificates?.standard_name ||
-                (Array.isArray(ex.target)
-                  ? ex.target[0]
-                  : ex.target || "자격증");
+                ex.exam_certificates?.[0]?.certificates?.standard_name ||
+                ex.target ||
+                "자격증";
               const isAlways = ex.exam_type === "always";
               const end = ex.apply_end_date?.split("T")[0] || "";
 
+              let examDDay = "접수중";
+              let exUrgent = false;
+              let exDDay = false;
+              let exFinished = false;
+              let sortWeight = 999;
+
+              if (!isAlways && ex.apply_end_date) {
+                const diff = Math.ceil(
+                  (new Date(ex.apply_end_date).getTime() -
+                    new Date().getTime()) /
+                    (1000 * 60 * 60 * 24),
+                );
+                sortWeight = diff;
+
+                if (diff < 0) {
+                  examDDay = "마감";
+                  exFinished = true;
+                } else if (diff === 0) {
+                  examDDay = "오늘마감";
+                  exUrgent = true;
+                } else if (diff <= 3) {
+                  examDDay = `D-${diff}`;
+                  exUrgent = true;
+                } else {
+                  examDDay = `D-${diff}`;
+                  exDDay = true;
+                }
+              }
+
               return {
-                id: ex.id,
+                id: String(ex.id),
                 type: "exam",
                 title: isAlways
                   ? `${certName} (상시)`
                   : `${certName} (${ex.exam_round || ""})`,
                 institution: instName,
-                dDayValue: isAlways ? 999 : calculateDDay(ex.apply_end_date),
-                raw: {
-                  ...ex,
-                  type: "exam",
-                  certName,
-                  instNm: instName,
-                  srcUrl: webUrl,
-                  pbancEndYmd: isAlways ? "상시" : end.replace(/-/g, ""),
-                },
+                dDayLabel: examDDay,
+                isUrgent: exUrgent,
+                isDDay: exDDay,
+                isFinished: exFinished,
+                sortWeight,
+                pbancEndYmd: isAlways ? "상시" : end,
+                apply_start_date: ex.apply_start_date,
+                apply_end_date: ex.apply_end_date,
+                exam_start_date: ex.exam_start_date,
+                exam_end_date: ex.exam_end_date,
+                result_date: ex.result_date,
+                srcUrl: webUrl,
               };
             });
-            setItems(
-              formattedExams
-                .filter((ex) => getStatus(ex.raw.pbancEndYmd) !== "마감")
-                .sort((a, b) => a.dDayValue - b.dDayValue),
-            );
+
+            const aliveExams = formattedExams.filter((ex) => !ex.isFinished);
+            setItems(aliveExams.sort((a, b) => a.sortWeight - b.sortWeight));
           }
         }
       } catch (err) {
@@ -95,15 +223,12 @@ export default function HomeScreen() {
     loadData();
   }, [activeTab]);
 
-  const calculateDDay = (date: string) => {
-    if (!date) return 999;
-    const diff = new Date(date).getTime() - new Date().getTime();
-    return Math.ceil(diff / (1000 * 60 * 60 * 24));
-  };
-
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return "-";
-    return dateStr.split("T")[0];
+  const handleItemPress = (clickedItem: any) => {
+    if (clickedItem.type === "exam") {
+      setSelectedItem({ ...clickedItem });
+    } else {
+      setSelectedItem({ ...clickedItem.raw });
+    }
   };
 
   if (loading)
@@ -163,170 +288,22 @@ export default function HomeScreen() {
           {activeTab === "job" ? "전산직 채용 공고" : "자격증 시험 일정"}
         </Text>
 
-        {items.map((item) => {
-          const dDayLabel = getStatus(item.raw.pbancEndYmd);
-          const isSaved = savedJobs.find((j: any) => j.id === item.id);
-          return (
-            <TouchableOpacity
-              key={item.id}
-              style={theme.card}
-              onPress={() => setSelectedItem(item.raw)}>
-              <View
-                style={[
-                  theme.cardIcon,
-                  {
-                    backgroundColor:
-                      item.type === "job" ? "#eef2ff" : "#fffbeb",
-                  },
-                ]}>
-                <Ionicons
-                  name={
-                    item.type === "job" ? "business-outline" : "ribbon-outline"
-                  }
-                  size={22}
-                  color={item.type === "job" ? "#4f46e5" : "#d97706"}
-                />
-              </View>
-              <View style={theme.cardInfo}>
-                <Text style={theme.cardInst}>{item.institution}</Text>
-                <Text style={theme.cardTitle} numberOfLines={1}>
-                  {item.title}
-                </Text>
-                <View
-                  style={[
-                    theme.dDayBadge,
-                    dDayLabel === "D-Day" && { backgroundColor: "#fee2e2" },
-                  ]}>
-                  <Text
-                    style={[
-                      theme.dDayText,
-                      dDayLabel === "D-Day" && { color: "#ef4444" },
-                    ]}>
-                    {dDayLabel}
-                  </Text>
-                </View>
-              </View>
-              <TouchableOpacity
-                onPress={() => toggleSave(item)}
-                style={{ padding: 10 }}>
-                <Ionicons
-                  name={isSaved ? "star" : "star-outline"}
-                  size={24}
-                  color={isSaved ? "#f59e0b" : "#e2e8f0"}
-                />
-              </TouchableOpacity>
-            </TouchableOpacity>
-          );
-        })}
+        {items.map((item) => (
+          <JobCard
+            key={item.id}
+            item={item}
+            isSaved={!!savedJobs.find((j: any) => j.id === item.id)}
+            onPress={() => handleItemPress(item)}
+            onToggleSave={() => toggleSave(item)}
+          />
+        ))}
       </ScrollView>
 
-      <Modal visible={!!selectedItem} transparent animationType="slide">
-        <View style={theme.modalOverlay}>
-          <View style={theme.modalContent}>
-            <TouchableOpacity
-              style={{ alignSelf: "flex-end", marginBottom: 10 }}
-              onPress={() => setSelectedItem(null)}>
-              <Ionicons name="close" size={28} color="#1e293b" />
-            </TouchableOpacity>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={theme.modalInst}>{selectedItem?.instNm}</Text>
-              <Text style={theme.modalTitle}>
-                {selectedItem?.recrutPbancTtl || selectedItem?.certName}
-              </Text>
-              <View style={theme.modalDivider} />
-
-              {selectedItem?.type === "exam" ? (
-                <>
-                  <Text style={theme.modalSectionTitle}>📅 시험 상세 일정</Text>
-                  <View
-                    style={{
-                      backgroundColor: "#f8fafc",
-                      padding: 15,
-                      borderRadius: 12,
-                      gap: 12,
-                    }}>
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        justifyContent: "space-between",
-                      }}>
-                      <Text style={{ color: "#64748b", fontWeight: "600" }}>
-                        원서 접수
-                      </Text>
-                      <Text style={{ color: "#1e293b" }}>
-                        {selectedItem?.apply_start_date
-                          ? `${formatDate(selectedItem.apply_start_date)} ~ ${formatDate(selectedItem.apply_end_date)}`
-                          : "상시 접수"}
-                      </Text>
-                    </View>
-                    <View style={{ height: 1, backgroundColor: "#e2e8f0" }} />
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        justifyContent: "space-between",
-                      }}>
-                      <Text style={{ color: "#64748b", fontWeight: "600" }}>
-                        필기 시험
-                      </Text>
-                      <Text style={{ color: "#1e293b" }}>
-                        {formatDate(selectedItem?.exam_start_date) ||
-                          "일정 확인 필요"}
-                      </Text>
-                    </View>
-                    <View style={{ height: 1, backgroundColor: "#e2e8f0" }} />
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        justifyContent: "space-between",
-                      }}>
-                      <Text style={{ color: "#64748b", fontWeight: "600" }}>
-                        실기 시험
-                      </Text>
-                      <Text style={{ color: "#1e293b" }}>
-                        {formatDate(selectedItem?.exam_end_date) || "-"}
-                      </Text>
-                    </View>
-                  </View>
-                </>
-              ) : (
-                <>
-                  <Text style={theme.modalSectionTitle}>
-                    📍 채용 공고 상세 정보
-                  </Text>
-                  <Text style={theme.modalText}>
-                    {selectedItem?.aplyQlfcCn ||
-                      "상세 공고 내용을 확인해주세요."}
-                  </Text>
-                </>
-              )}
-
-              <Text style={[theme.modalSectionTitle, { marginTop: 20 }]}>
-                ⏰ 마감 기한
-              </Text>
-              <Text style={{ color: "#ef4444", fontWeight: "700" }}>
-                {selectedItem?.pbancEndYmd === "상시"
-                  ? "상시 접수 가능"
-                  : `${selectedItem?.pbancEndYmd || ""} 까지`}
-              </Text>
-
-              <TouchableOpacity
-                style={theme.modalLinkBtn}
-                onPress={() =>
-                  Linking.openURL(
-                    selectedItem?.srcUrl || "https://www.q-net.or.kr",
-                  )
-                }>
-                <Text style={theme.modalLinkText}>
-                  {selectedItem?.type === "exam"
-                    ? "시험 원문 확인하기"
-                    : "채용 공고 원문 확인하기"}
-                </Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+      <JobDetailModal
+        isVisible={!!selectedItem}
+        onClose={() => setSelectedItem(null)}
+        item={selectedItem}
+      />
     </View>
   );
 }

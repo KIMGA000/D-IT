@@ -3,7 +3,6 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
-  Linking,
   Modal,
   ScrollView,
   Text,
@@ -11,23 +10,21 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import JobCard from "../components/JobCard";
+import JobDetailModal from "../components/JobDetailModal";
 import { useSaved } from "../context/SavedContext";
 import { supabase } from "../services/supabase";
 import { theme } from "../styles/theme";
-import { getStatus } from "../utils/data";
 
 export default function ProfileScreen() {
   const { savedJobs, toggleSave, userSpecs, addSpec, removeSpec } = useSaved();
 
-  const [selectedJob, setSelectedJob] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<"job" | "exam">("job");
   const [isCertModalVisible, setIsCertModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [allCerts, setAllCerts] = useState<any[]>([]);
   const [loadingCerts, setLoadingCerts] = useState(false);
-
-  const activeSavedJobs = savedJobs.filter(
-    (j) => getStatus(j.raw?.pbancEndYmd || j.raw?.apply_end_date) !== "마감",
-  );
+  const [selectedItem, setSelectedDetail] = useState<any>(null);
 
   useEffect(() => {
     if (isCertModalVisible) {
@@ -40,14 +37,7 @@ export default function ProfileScreen() {
     try {
       const { data, error } = await supabase
         .from("certificates")
-        .select(
-          `
-          standard_name,
-          grades,
-          aliases,
-          agencies ( name, aliases )
-        `,
-        )
+        .select(`standard_name, grades, aliases, agencies ( name, aliases )`)
         .order("standard_name");
 
       if (error) throw error;
@@ -55,11 +45,11 @@ export default function ProfileScreen() {
       if (data) {
         const flattened: any[] = [];
         data.forEach((cert) => {
-          if (cert.grades && cert.grades.length > 0) {
+          if (cert.grades && cert.grades.length > 1) {
             cert.grades.forEach((grade: string) => {
               flattened.push({
                 ...cert,
-                displayName: `${cert.standard_name} ${grade}`,
+                displayName: `${cert.standard_name} ${grade}`, // 멀티 급수만 이름 뒤에 등급 명시
                 grade: grade,
               });
             });
@@ -67,7 +57,8 @@ export default function ProfileScreen() {
             flattened.push({
               ...cert,
               displayName: cert.standard_name,
-              grade: null,
+              grade:
+                cert.grades && cert.grades.length === 1 ? cert.grades[0] : null,
             });
           }
         });
@@ -80,17 +71,102 @@ export default function ProfileScreen() {
     }
   };
 
+  const getProcessedSavedItems = () => {
+    const filteredByTab = savedJobs.filter((j) => j && j.type === activeTab);
+
+    const mapped = filteredByTab.map((item: any) => {
+      let targetDateSrc = "";
+
+      if (item?.type === "job") {
+        targetDateSrc = item.raw?.pbancEndYmd || "";
+      } else {
+        targetDateSrc = item["apply_end_date"] || item?.apply_end_date || "";
+      }
+
+      let rawDateStr = String(targetDateSrc || "")
+        .split("T")[0]
+        .replace(/[^0-9]/g, "");
+      let displayDate = rawDateStr;
+
+      if (rawDateStr.length === 8) {
+        displayDate = `${rawDateStr.substring(0, 4)}-${rawDateStr.substring(4, 6)}-${rawDateStr.substring(6, 8)}`;
+      }
+
+      let dDayLabel = "접수중";
+      let isUrgent = false;
+      let isDDay = false;
+      let isFinished = false;
+      let sortWeight = 999;
+
+      if (displayDate && displayDate !== "상시" && displayDate.length === 10) {
+        const target = new Date(displayDate);
+        const today = new Date();
+        target.setHours(0, 0, 0, 0);
+        today.setHours(0, 0, 0, 0);
+
+        if (!isNaN(target.getTime())) {
+          const diffDays = Math.ceil(
+            (target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+          );
+          sortWeight = diffDays;
+
+          if (diffDays < 0) {
+            dDayLabel = "마감";
+            isFinished = true;
+          } else if (diffDays === 0) {
+            dDayLabel = "오늘마감";
+            isUrgent = true;
+          } else if (diffDays <= 3) {
+            dDayLabel = `D-${diffDays}`;
+            isUrgent = true;
+          } else {
+            dDayLabel = `D-${diffDays}`;
+            isDDay = true;
+          }
+        }
+      }
+
+      if (targetDateSrc === "상시") {
+        dDayLabel = "상시";
+        sortWeight = 9999;
+      }
+
+      return {
+        ...item,
+        dDayLabel,
+        isUrgent,
+        isDDay,
+        isFinished,
+        sortWeight,
+      };
+    });
+
+    return mapped
+      .filter((item) => !item.isFinished)
+      .sort((a, b) => a.sortWeight - b.sortWeight);
+  };
+
+  const displaySavedItems = getProcessedSavedItems();
+
   const filteredCerts = allCerts.filter((cert) => {
     const query = searchQuery.toLowerCase().replace(/\s/g, "");
     const nameMatch = cert.displayName
       .toLowerCase()
       .replace(/\s/g, "")
       .includes(query);
-    const certAliasMatch = cert.aliases?.some((a: string) =>
-      a.toLowerCase().includes(query),
+    return (
+      nameMatch ||
+      cert.aliases?.some((a: string) => a.toLowerCase().includes(query))
     );
-    return nameMatch || certAliasMatch;
   });
+
+  const handleItemPress = (item: any) => {
+    if (item && item.type === "exam") {
+      setSelectedDetail({ ...item });
+    } else if (item) {
+      setSelectedDetail({ ...item.raw });
+    }
+  };
 
   return (
     <View style={theme.safe}>
@@ -101,6 +177,7 @@ export default function ProfileScreen() {
       <ScrollView
         contentContainerStyle={theme.scrollContent}
         showsVerticalScrollIndicator={false}>
+        {/* 보유 자격증 등록 세션 */}
         <View
           style={{
             flexDirection: "row",
@@ -149,7 +226,7 @@ export default function ProfileScreen() {
                 />
                 <View style={theme.cardInfo}>
                   <Text style={theme.cardTitle}>
-                    {cert.displayName || cert}
+                    {cert.displayName || cert.standard_name || cert}
                   </Text>
                 </View>
                 <TouchableOpacity onPress={() => removeSpec(cert)}>
@@ -160,42 +237,67 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        <Text style={theme.sectionTitle}>
-          관심 공고 ({activeSavedJobs.length})
-        </Text>
-        {activeSavedJobs.length === 0 ? (
+        {/* 관심 공고 및 자격증 이원화 탭바 구역 */}
+        <View style={[theme.subTabBar, { marginBottom: 15 }]}>
+          <TouchableOpacity
+            style={[
+              theme.subTabBtn,
+              activeTab === "job" && theme.subTabBtnActive,
+            ]}
+            onPress={() => setActiveTab("job")}>
+            <Text
+              style={[
+                theme.subTabText,
+                activeTab === "job" && theme.subTabTextActive,
+              ]}>
+              관심 채용공고
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              theme.subTabBtn,
+              activeTab === "exam" && theme.subTabBtnActive,
+            ]}
+            onPress={() => setActiveTab("exam")}>
+            <Text
+              style={[
+                theme.subTabText,
+                activeTab === "exam" && theme.subTabTextActive,
+              ]}>
+              관심 자격증일정
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {displaySavedItems.length === 0 ? (
           <View style={theme.emptyStateBox}>
-            <Text style={theme.emptyStateText}>찜한 공고가 없습니다.</Text>
+            <Text style={theme.emptyStateText}>
+              {activeTab === "job"
+                ? "찜한 채용 공고가 없습니다."
+                : "찜한 자격증 일정이 없습니다."}
+            </Text>
           </View>
         ) : (
-          activeSavedJobs.map((item) => (
-            <TouchableOpacity
+          displaySavedItems.map((item) => (
+            <JobCard
               key={item.id}
-              style={theme.card}
-              onPress={() => setSelectedJob(item.raw)}>
-              <View style={theme.cardIcon}>
-                <Ionicons
-                  name={item.type === "job" ? "business" : "ribbon"}
-                  size={22}
-                  color="#4f46e5"
-                />
-              </View>
-              <View style={theme.cardInfo}>
-                <Text style={theme.cardInst}>{item.institution || ""}</Text>
-                <Text style={theme.cardTitle} numberOfLines={1}>
-                  {item.title || ""}
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => toggleSave(item)}
-                style={{ padding: 10 }}>
-                <Ionicons name="star" size={24} color="#f59e0b" />
-              </TouchableOpacity>
-            </TouchableOpacity>
+              item={item}
+              isSaved={true}
+              onPress={() => handleItemPress(item)}
+              onToggleSave={() => toggleSave(item)}
+            />
           ))
         )}
       </ScrollView>
 
+      {/* 공통 상세 모달 컴포넌트 결합 */}
+      <JobDetailModal
+        isVisible={!!selectedItem}
+        onClose={() => setSelectedDetail(null)}
+        item={selectedItem}
+      />
+
+      {/* 자격증 검색 추가 팝업 */}
       <Modal visible={isCertModalVisible} animationType="slide" transparent>
         <View style={theme.modalOverlay}>
           <View style={[theme.modalContent, { height: "80%" }]}>
@@ -280,49 +382,6 @@ export default function ProfileScreen() {
                 )}
               />
             )}
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={!!selectedJob} transparent animationType="slide">
-        <View style={theme.modalOverlay}>
-          <View style={theme.modalContent}>
-            <TouchableOpacity
-              style={{ alignSelf: "flex-end", marginBottom: 10 }}
-              onPress={() => setSelectedJob(null)}>
-              <Ionicons name="close" size={28} color="#1e293b" />
-            </TouchableOpacity>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={theme.modalInst}>
-                {selectedJob?.instNm || selectedJob?.institution || ""}
-              </Text>
-              <Text style={theme.modalTitle}>
-                {selectedJob?.recrutPbancTtl ||
-                  selectedJob?.certName ||
-                  selectedJob?.title ||
-                  ""}
-              </Text>
-              <View style={theme.modalDivider} />
-              <Text style={theme.modalSectionTitle}>📍 상세 정보</Text>
-              <Text style={theme.modalText}>
-                {selectedJob?.aplyQlfcCn || "상세 내용을 확인해주세요."}
-              </Text>
-              <Text style={theme.modalSectionTitle}>⏰ 마감 기한</Text>
-              <Text style={{ color: "#ef4444", fontWeight: "700" }}>
-                {selectedJob?.pbancEndYmd === "상시"
-                  ? "상시 접수 가능"
-                  : `${selectedJob?.pbancEndYmd || ""} 까지`}
-              </Text>
-              <TouchableOpacity
-                style={theme.modalLinkBtn}
-                onPress={() =>
-                  Linking.openURL(
-                    selectedJob?.srcUrl || "https://www.q-net.or.kr",
-                  )
-                }>
-                <Text style={theme.modalLinkText}>공고/시험 원문 확인하기</Text>
-              </TouchableOpacity>
-            </ScrollView>
           </View>
         </View>
       </Modal>
