@@ -1,11 +1,8 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
-  Modal,
   ScrollView,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
@@ -14,6 +11,10 @@ import { useSaved } from "../context/SavedContext";
 import { fetchAlioJobs } from "../services/api";
 import { supabase } from "../services/supabase";
 import { theme } from "../styles/theme";
+
+// 🎯 분리된 시뮬레이터 전용 카드 및 명세서 모달 임포트
+import SimulatorCard from "../components/SimulatorCard";
+import SimulatorDetailModal from "../components/SimulatorDetailModal";
 
 const ORG_TYPES = [
   { id: "all", name: "전체" },
@@ -43,7 +44,6 @@ export default function SimulatorScreen() {
 
   const loadRankings = async () => {
     setLoading(true);
-
     try {
       const jobs = await fetchAlioJobs();
 
@@ -90,13 +90,12 @@ export default function SimulatorScreen() {
           (s) => s !== "required" && s !== "essential",
         );
 
-        // 유저 자격증 구조화
         const myCerts = userSpecs.certificates.map((c: any) => ({
           name: c.standard_name,
           grade: c.grade || "",
         }));
 
-        // 응시 필수 자격 검증 (apply_step = ["required"])
+        // 응시 필수 자격 검증
         let isEligible = true;
         let hasRequiredRule = false;
         let requiredConditionText = "응시 필수";
@@ -124,22 +123,18 @@ export default function SimulatorScreen() {
             if (userHasCert) {
               if (allowedGrades.length <= 1) {
                 satisfiedCount++;
-
                 const displayName =
                   certMasterGrades.length > 1 && userHasCert.grade
                     ? `${certName} (${userHasCert.grade})`
                     : certName;
-
                 requiredDetails.push({ certName: displayName, hasIt: true });
               } else {
                 const hasGrade = allowedGrades.includes(userHasCert.grade);
                 if (hasGrade) satisfiedCount++;
-
                 const displayName =
                   certMasterGrades.length > 1 && userHasCert.grade
                     ? `${certName} (${userHasCert.grade})`
                     : certName;
-
                 requiredDetails.push({
                   certName: displayName,
                   hasIt: hasGrade,
@@ -150,14 +145,11 @@ export default function SimulatorScreen() {
             }
           });
 
-          if (satisfiedCount === 0) {
-            isEligible = false;
-          }
+          if (satisfiedCount === 0) isEligible = false;
         }
 
         // 우대 가산점 스코어 통합 연산
         let myTotalScore = 0;
-
         const bonusRule = rules.find(
           (r: any) => r.apply_step && r.apply_step[0] !== "required",
         );
@@ -208,6 +200,7 @@ export default function SimulatorScreen() {
             certName: displayCertName,
             hasIt: isSatisfied,
             score: isSatisfied ? calculatedScore : 0,
+            potentialScore: Number(gradeScores[0] || 0),
             unit,
           };
 
@@ -318,382 +311,25 @@ export default function SimulatorScreen() {
         </ScrollView>
       </View>
 
+      {/* 리스트부 가독성 대격변 세션 */}
       <ScrollView
         contentContainerStyle={theme.scrollContent}
         showsVerticalScrollIndicator={false}>
         {displayList.map((item) => (
-          <TouchableOpacity
+          <SimulatorCard
             key={item.id}
-            activeOpacity={0.8}
+            item={item}
             onPress={() => item.isReady && openDetailModal(item)}
-            style={[theme.card, !item.isReady && { opacity: 0.6 }]}>
-            <View style={theme.cardInfo}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}>
-                <Text style={theme.cardInst}>{item.institution}</Text>
-
-                {item.isReady && item.hasBonusRules && (
-                  <Text style={styles.scoreText}>
-                    {(item.normalizedScore || 0).toFixed(0)}점
-                  </Text>
-                )}
-              </View>
-
-              <Text style={theme.cardTitle} numberOfLines={1}>
-                {item.title}
-              </Text>
-
-              {item.isReady ? (
-                <View style={{ marginTop: 10 }}>
-                  {item.hasRequiredRule && (
-                    <View
-                      style={[
-                        styles.requiredBlock,
-                        {
-                          backgroundColor: item.analysis.isEligible
-                            ? "#f0fdf4"
-                            : "#fef2f2",
-                          borderColor: item.analysis.isEligible
-                            ? "#bbf7d0"
-                            : "#fecaca",
-                        },
-                      ]}>
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 4,
-                        }}>
-                        <Ionicons
-                          name={
-                            item.analysis.isEligible
-                              ? "checkmark-circle"
-                              : "alert-circle"
-                          }
-                          size={16}
-                          color={
-                            item.analysis.isEligible ? "#166534" : "#991b1b"
-                          }
-                        />
-                        <Text
-                          style={[
-                            styles.requiredTitleText,
-                            {
-                              color: item.analysis.isEligible
-                                ? "#166534"
-                                : "#991b1b",
-                            },
-                          ]}>
-                          {item.requiredConditionText} 자격:{" "}
-                          {item.analysis.isEligible
-                            ? "충족 (지원 가능)"
-                            : "미달 (지원 불가)"}
-                        </Text>
-                      </View>
-                    </View>
-                  )}
-
-                  {item.hasBonusRules && item.steps.length > 0 && (
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        gap: 5,
-                        marginBottom: 10,
-                      }}>
-                      {item.steps.map((step: string) => (
-                        <View key={step} style={styles.badge}>
-                          <Text style={styles.badgeText}>
-                            {step === "document"
-                              ? "서류"
-                              : step === "written"
-                                ? "필기"
-                                : "면접"}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
-                  {item.hasBonusRules && (
-                    <View style={theme.progressContainer}>
-                      <View
-                        style={[
-                          theme.progressFill,
-                          {
-                            width: `${Math.min(item.normalizedScore || 0, 100)}%`,
-                          },
-                        ]}
-                      />
-                      <Text style={theme.progressText}>
-                        가산점 {(item.myScore || 0).toFixed(1)}
-                        {item.unit} / {(item.maxLimit || 0).toFixed(1)}
-                        {item.unit} 반영
-                      </Text>
-                    </View>
-                  )}
-
-                  <Text style={styles.noticeLink}>
-                    * 참고 공고: {item.noticeName}
-                  </Text>
-
-                  <Text style={styles.clickableTipText}>
-                    💡 블럭을 클릭하면 상세 점수 명세서를 볼 수 있습니다
-                  </Text>
-                </View>
-              ) : (
-                <Text style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>
-                  데이터 준비 중
-                </Text>
-              )}
-            </View>
-          </TouchableOpacity>
+          />
         ))}
       </ScrollView>
 
-      <Modal visible={modalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalHeaderTitle} numberOfLines={1}>
-                {selectedDetail?.institution} 상세 명세서
-              </Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <Ionicons name="close" size={26} color="#1e293b" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: 20 }}>
-              {selectedDetail?.hasRequiredRule && (
-                <View
-                  style={[
-                    styles.sectionBox,
-                    {
-                      backgroundColor: selectedDetail?.analysis.isEligible
-                        ? "#f0fdf4"
-                        : "#fef2f2",
-                      marginBottom: 15,
-                    },
-                  ]}>
-                  <Text
-                    style={[
-                      styles.sectionTitle,
-                      {
-                        color: selectedDetail?.analysis.isEligible
-                          ? "#166534"
-                          : "#991b1b",
-                      },
-                    ]}>
-                    {selectedDetail?.analysis.isEligible
-                      ? `🟢 ${selectedDetail?.requiredConditionText} 자격 충족`
-                      : `🔴 ${selectedDetail?.requiredConditionText} 자격 미달`}
-                  </Text>
-                  <Text style={styles.sectionDesc}>
-                    지원직무 필수 충족 요건 자격증 보유 현황
-                  </Text>
-                  <View style={{ marginTop: 8, gap: 6 }}>
-                    {selectedDetail?.analysis.requiredDetails.map(
-                      (req: any, idx: number) => (
-                        <View key={idx} style={styles.detailRow}>
-                          <Text
-                            style={{
-                              color: req.hasIt ? "#166534" : "#64748b",
-                              fontWeight: req.hasIt ? "600" : "400",
-                            }}>
-                            {req.hasIt ? "✅" : "❌"} {req.certName}
-                          </Text>
-                          <Text
-                            style={{
-                              fontSize: 12,
-                              color: req.hasIt ? "#166534" : "#94a3b8",
-                            }}>
-                            {req.hasIt ? "보유 중" : "미보유"}
-                          </Text>
-                        </View>
-                      ),
-                    )}
-                  </View>
-                </View>
-              )}
-
-              {[
-                {
-                  title: "📄 서류 전형 가산점 명세",
-                  details: selectedDetail?.analysis?.documentDetails,
-                },
-                {
-                  title: "✍️ 필기 전형 가산점 명세",
-                  details: selectedDetail?.analysis?.writtenDetails,
-                },
-                {
-                  title: "🗣️ 면접 전형 가산점 명세",
-                  details: selectedDetail?.analysis?.interviewDetails,
-                },
-              ].map((stepGroup, sIdx) => {
-                if (!stepGroup.details || stepGroup.details.length === 0)
-                  return null;
-
-                const satisfiedList = stepGroup.details.filter(
-                  (d: any) => d.hasIt,
-                );
-                const missingList = stepGroup.details.filter(
-                  (d: any) => !d.hasIt,
-                );
-
-                return (
-                  <View
-                    key={sIdx}
-                    style={[styles.sectionBox, { marginTop: 15 }]}>
-                    <Text style={styles.sectionTitle}>{stepGroup.title}</Text>
-
-                    <Text style={styles.subLabel}>
-                      💡 적용된 자격증 내역 (만족)
-                    </Text>
-                    {satisfiedList.length > 0 ? (
-                      satisfiedList.map((d: any, idx: number) => (
-                        <View key={idx} style={styles.detailRow}>
-                          <Text style={{ color: "#1e293b" }}>
-                            ⭐ {d.certName}
-                          </Text>
-                          <Text style={{ color: "#4f46e5", fontWeight: "600" }}>
-                            +{d.score}
-                            {d.unit} 반영
-                          </Text>
-                        </View>
-                      ))
-                    ) : (
-                      <Text style={styles.emptyText}>
-                        보유 중인 가산점 대상 자격증이 없습니다.
-                      </Text>
-                    )}
-
-                    {missingList.length > 0 && (
-                      <>
-                        <Text
-                          style={[
-                            styles.subLabel,
-                            { marginTop: 12, color: "#b45309" },
-                          ]}>
-                          🚀 추천 자격증 취득 시 추가 확보 가능 항목
-                        </Text>
-                        {missingList.map((d: any, idx: number) => (
-                          <View key={idx} style={styles.detailRow}>
-                            <Text style={{ color: "#64748b" }}>
-                              • {d.certName}
-                            </Text>
-                            <Text
-                              style={{ color: "#b45309", fontWeight: "500" }}>
-                              +{d.score}
-                              {d.unit} 확보 가능
-                            </Text>
-                          </View>
-                        ))}
-                      </>
-                    )}
-                  </View>
-                );
-              })}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+      {/* 모달 렌더링부 외부 컴포넌트 캡슐화 연동 */}
+      <SimulatorDetailModal
+        isVisible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        selectedDetail={selectedDetail}
+      />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  scoreText: { fontSize: 18, fontWeight: "900", color: "#4f46e5" },
-  badge: {
-    backgroundColor: "#eef2ff",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "#4f46e5",
-  },
-  badgeText: { fontSize: 10, color: "#4f46e5", fontWeight: "700" },
-  noticeLink: {
-    fontSize: 10,
-    color: "#94a3b8",
-    marginTop: 10,
-    fontStyle: "italic",
-  },
-  requiredBlock: {
-    padding: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginBottom: 8,
-  },
-  requiredTitleText: { fontSize: 12, fontWeight: "800" },
-  clickableTipText: {
-    fontSize: 10,
-    color: "#a0aec0",
-    marginTop: 8,
-    textAlign: "right",
-    fontStyle: "italic",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: "85%",
-    padding: 20,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 15,
-    borderBottomWidth: 1,
-    borderColor: "#f1f5f9",
-    paddingBottom: 10,
-  },
-  modalHeaderTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#1e293b",
-    flex: 1,
-  },
-  sectionBox: {
-    backgroundColor: "#f8fafc",
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#1e293b",
-    marginBottom: 4,
-  },
-  sectionDesc: { fontSize: 11, color: "#64748b", marginTop: 2 },
-  subLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#4f46e5",
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  detailRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 4,
-  },
-  emptyText: {
-    fontSize: 12,
-    color: "#94a3b8",
-    fontStyle: "italic",
-    paddingLeft: 4,
-  },
-});

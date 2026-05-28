@@ -283,8 +283,9 @@ export const fetchAlioJobs = async (): Promise<Item[]> => {
         pbanc_end_ymd: job.endYmd,
         aply_qlfc_cn: job.aplyQlfcCn || "공고 원문을 참조해 주세요.",
         scrn_mthd_expln: job.scrnprcdrMthdExpln || "공고 원문을 참조해 주세요.",
-        pref_cn: job.prefCn || "우대사항 정보 없음",
+        pref_cn: job.prefCn || "공고 원문을 참조해 주세요.",
         max_bonus_rate: currentRate,
+        created_at: new Date().toISOString(),
       };
     });
 
